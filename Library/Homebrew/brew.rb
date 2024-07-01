@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # `HOMEBREW_STACKPROF` should be set via `brew prof --stackprof`, not manually.
@@ -84,9 +84,12 @@ begin
   end
 
   if internal_cmd || Commands.external_ruby_v2_cmd_path(cmd)
-    cmd_class = Homebrew::AbstractCommand.command(T.must(cmd))
+    cmd = T.must(cmd)
+    cmd_class = Homebrew::AbstractCommand.command(cmd)
     if cmd_class
-      cmd_class.new.run
+      command_instance = cmd_class.new
+      Utils::Analytics.report_command_run(command_instance)
+      command_instance.run
     else
       Homebrew.public_send Commands.method_name(cmd)
     end
@@ -136,9 +139,9 @@ begin
   end
 rescue UsageError => e
   require "help"
-  Homebrew::Help.help cmd, remaining_args: args.remaining, usage_error: e.message
+  Homebrew::Help.help cmd, remaining_args: args&.remaining, usage_error: e.message
 rescue SystemExit => e
-  onoe "Kernel.exit" if args.debug? && !e.success?
+  onoe "Kernel.exit" if args&.debug? && !e.success?
   $stderr.puts Utils::Backtrace.clean(e) if args&.debug? || ARGV.include?("--debug")
   raise
 rescue Interrupt
@@ -146,7 +149,7 @@ rescue Interrupt
   exit 130
 rescue BuildError => e
   Utils::Analytics.report_build_error(e)
-  e.dump(verbose: args&.verbose?)
+  e.dump(verbose: args&.verbose? || false)
 
   if OS.unsupported_configuration?
     $stderr.puts "#{Tty.bold}Do not report this issue: you are running in an unsupported configuration.#{Tty.reset}"
@@ -172,22 +175,25 @@ rescue BuildError => e
   end
 
   exit 1
-rescue Exception => e # rubocop:disable Lint/RescueException
-  runtime_or_system_call_error = e.is_a?(RuntimeError) || e.is_a?(SystemCallError)
-  raise if runtime_or_system_call_error && e.message.empty?
+rescue RuntimeError, SystemCallError => e
+  raise if e.message.empty?
 
+  onoe e
+  $stderr.puts Utils::Backtrace.clean(e) if args&.debug? || ARGV.include?("--debug")
+
+  exit 1
+rescue Exception => e # rubocop:disable Lint/RescueException
   onoe e
 
   method_deprecated_error = e.is_a?(MethodDeprecatedError)
-  runtime_or_system_call_or_method_deprecated_error = runtime_or_system_call_error || method_deprecated_error
-  if args&.debug? || ARGV.include?("--debug") || !runtime_or_system_call_or_method_deprecated_error
-    $stderr.puts Utils::Backtrace.clean(e)
-  end
+  $stderr.puts Utils::Backtrace.clean(e) if args&.debug? || ARGV.include?("--debug") || !method_deprecated_error
 
   if OS.unsupported_configuration?
     $stderr.puts "#{Tty.bold}Do not report this issue: you are running in an unsupported configuration.#{Tty.reset}"
-  elsif Homebrew::EnvConfig.no_auto_update?
-    $stderr.puts "#{Tty.bold}You have disabled automatic updates.#{Tty.reset}"
+  elsif Homebrew::EnvConfig.no_auto_update? &&
+        (fetch_head = HOMEBREW_REPOSITORY/".git/FETCH_HEAD") &&
+        (!fetch_head.exist? || (fetch_head.mtime.to_date < Date.today))
+    $stderr.puts "#{Tty.bold}You have disabled automatic updates and have not updated today.#{Tty.reset}"
     $stderr.puts "#{Tty.bold}Do not report this issue until you've run `brew update` and tried again.#{Tty.reset}"
   elsif (issues_url = (method_deprecated_error && e.issues_url) || Utils::Backtrace.tap_error_url(e))
     $stderr.puts "If reporting this issue please do so at (not Homebrew/brew or Homebrew/homebrew-core):"
