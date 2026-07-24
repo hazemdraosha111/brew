@@ -80,6 +80,28 @@ RSpec.describe Sandbox::Landlock do
     end
   end
 
+  describe "::kernel_abi_version" do
+    it "reports the kernel ABI even when Linux sandboxing is disabled" do
+      allow(Homebrew::EnvConfig).to receive(:sandbox_linux?).and_return(false)
+      allow(described_class).to receive(:landlock_create_ruleset).with(nil, 0, 1).and_return(6)
+
+      expect(described_class.kernel_abi_version).to eq(6)
+    end
+
+    it "returns nil for a kernel without Landlock support" do
+      allow(described_class).to receive(:landlock_create_ruleset).with(nil, 0, 1).and_return(-1)
+
+      expect(described_class.kernel_abi_version).to be_nil
+    end
+
+    it "returns nil when Fiddle function setup fails" do
+      require "fiddle"
+      allow(described_class).to receive(:landlock_create_ruleset).and_raise(Fiddle::DLError)
+
+      expect(described_class.kernel_abi_version).to be_nil
+    end
+  end
+
   describe "#apply!" do
     let(:writable_dir) { mktmpdir }
     let(:tmpdir) { mktmpdir }

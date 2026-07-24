@@ -88,6 +88,23 @@ RSpec.describe Homebrew::Cmd::Config do
     expect(output.string).to include("Windows: Windows 11 Pro (25H2) [26200.8457]\n")
   end
 
+  it "prints the Landlock ABI in config output", :needs_linux do
+    output = StringIO.new
+
+    allow(Sandbox::Landlock).to receive(:kernel_abi_version).and_return(6)
+    allow(SystemConfig).to receive_messages(
+      homebrew_config:      nil,
+      core_tap_config:      nil,
+      homebrew_env_config:  nil,
+      hardware:             nil,
+      host_software_config: nil,
+    )
+
+    SystemConfig.dump_verbose_config(output)
+
+    expect(output.string).to include("Landlock ABI: 6\n")
+  end
+
   it "prints config sections in order" do
     output = StringIO.new
 

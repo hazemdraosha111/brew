@@ -107,6 +107,18 @@ class Sandbox
         @abi_version
       end
 
+      # The Landlock ABI version provided by the running kernel, regardless of
+      # whether Homebrew's Linux sandbox is enabled or usable.
+      sig { returns(T.nilable(Integer)) }
+      def kernel_abi_version
+        require "fiddle"
+
+        version = landlock_create_ruleset(nil, 0, CREATE_RULESET_VERSION)
+        version if version.positive?
+      rescue LoadError, Fiddle::DLError
+        nil
+      end
+
       sig { returns(T.nilable(String)) }
       def failure_reason
         case state
@@ -260,8 +272,8 @@ class Sandbox
           return :missing_fiddle
         end
 
-        version = landlock_create_ruleset(nil, 0, CREATE_RULESET_VERSION)
-        if version.positive?
+        version = kernel_abi_version
+        if version
           @abi_version = T.let(version, T.nilable(Integer))
           if version >= MINIMUM_ABI
             :available
