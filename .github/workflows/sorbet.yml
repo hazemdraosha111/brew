@@ -42,7 +42,7 @@ jobs:
           username: BrewTestBot
 
       - name: Set up commit signing
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.actor != 'dependabot[bot]'
         uses: Homebrew/actions/setup-commit-signing@df4b09108a1de9d6f995fe68f302b3f68bd6d2ef # 2026.07.20.1
         with:
           signing_key: ${{ secrets.BREWTESTBOT_SSH_SIGNING_KEY }}
@@ -98,7 +98,7 @@ jobs:
           fi
 
       - name: Push commits
-        if: steps.commit.outputs.committed == 'true'
+        if: steps.commit.outputs.committed == 'true' && github.actor != 'dependabot[bot]'
         uses: Homebrew/actions/git-try-push@df4b09108a1de9d6f995fe68f302b3f68bd6d2ef # 2026.07.20.1
         with:
           token: ${{ secrets.HOMEBREW_GITHUB_PUBLIC_REPO_TOKEN }}
@@ -108,7 +108,7 @@ jobs:
           origin_branch: "HEAD"
 
       - name: Open a pull request
-        if: steps.commit.outputs.pull_request == 'true'
+        if: steps.commit.outputs.pull_request == 'true' && github.actor != 'dependabot[bot]'
         run: gh pr create --fill
         env:
           GITHUB_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PUBLIC_REPO_TOKEN }}
