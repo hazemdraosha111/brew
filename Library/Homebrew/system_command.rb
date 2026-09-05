@@ -1,6 +1,7 @@
 # typed: strict
 # frozen_string_literal: true
 
+require "English"
 require "shellwords"
 require "stringio"
 
@@ -146,6 +147,9 @@ class SystemCommand
         debug:, verbose:, secrets:, chdir:, reset_uid:, run_as_real_uid:, timeout:)
   end
 
+  # Run a command attached to the caller's standard streams and terminal,
+  # raising if it fails. Unlike {SystemCommand.run!} nothing is captured, so
+  # interactive programs such as editors and pagers work.
   sig {
     params(
       executable: T.nilable(T.any(String, Pathname)),
@@ -158,17 +162,19 @@ class SystemCommand
     raise ArgumentError, "Missing executable" if executable.nil?
     raise ArgumentError, "Invalid nil command argument" if args.any?(&:nil?)
 
-    run = proc do
-      run!(executable, args: args.compact, env:, print_stdout: true, print_stderr: true, debug: true)
+    args = args.compact
+    if Context.current.verbose?
+      command = "#{executable} #{args * " "}".gsub(RUBY_PATH.to_s, "ruby")
+                                             .gsub($LOAD_PATH.join(File::PATH_SEPARATOR), "$LOAD_PATH")
+      ((out == :err) ? $stderr : $stdout).puts Formatter.redact_secrets(command, secrets)
     end
+    return if attached_success?(executable, args, env:, out:)
 
-    if out == :err
-      Utils::Output.redirect_stdout($stderr, &run)
-    else
-      run.call
-    end
+    raise ErrorDuringExecution.new([executable, *args], status: $CHILD_STATUS, secrets:)
   end
 
+  # Run a command attached to the caller's standard input with its output
+  # discarded, returning whether it succeeded.
   # Preserve the existing Formula DSL method name.
   # rubocop:disable Naming/PredicateMethod
   sig {
@@ -181,10 +187,44 @@ class SystemCommand
   def self.quiet_system(executable, *args, env: {})
     return false if executable.nil? || args.any?(&:nil?)
 
-    run(executable, args: args.compact, env:, print_stdout: false, print_stderr: false, debug: false,
-                    verbose: false).success?
+    # Redirect output streams to `/dev/null` instead of closing as some programs
+    # will fail to execute if they can't write to an open stream.
+    attached_success?(executable, args.compact, env:, out: File::NULL, err: File::NULL)
   end
   # rubocop:enable Naming/PredicateMethod
+
+  sig { returns(T::Array[String]) }
+  private_class_method def self.secrets
+    require "extend/ENV"
+    ENV.sensitive_environment.values
+  end
+
+  sig {
+    params(
+      executable: T.any(String, Pathname),
+      args:       T::Array[T.any(String, Pathname)],
+      env:        T::Hash[String, T.nilable(T.any(String, T::Boolean, PATH))],
+      out:        T.nilable(T.any(String, Symbol)),
+      err:        T.nilable(String),
+    ).returns(T::Boolean)
+  }
+  private_class_method def self.attached_success?(executable, args, env:, out: nil, err: nil)
+    # Like `system(3)`, keep the terminal's interrupt from raising in the parent
+    # so a command that handles it, such as an editor, keeps running. Trapping
+    # with a block rather than `IGNORE` leaves the child its default handler.
+    old_sigint_handler = Signal.trap(:INT) { nil }
+    old_sigquit_handler = Signal.trap(:QUIT) { nil }
+    begin
+      Kernel.system(env.transform_values { |value| value&.to_s }, executable.to_s, *args.map(&:to_s),
+                    **{ out:, err: }.compact)
+    ensure
+      Signal.trap(:INT, old_sigint_handler)
+      Signal.trap(:QUIT, old_sigquit_handler)
+    end
+    raise Interrupt if $CHILD_STATUS.termsig == Signal.list.fetch("INT") || $CHILD_STATUS.exitstatus == 130
+
+    $CHILD_STATUS.success? || false
+  end
 
   sig { returns(SystemCommand::Result) }
   def run!
