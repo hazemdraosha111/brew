@@ -207,11 +207,16 @@ class Livecheck
     referer: nil,
     user_agent: nil
   )
-    # Don't use `T.nilable(FalseClass)` and `T.nilable(TrueClass)` for `compressed` and `homebrew_curl`
-    # as we won't be able to check types without Sorbet runtime
+    # This manually enforces stricter values for `compressed` and
+    # `homebrew_curl`, as we can't rely on the Sorbet runtime being enabled in
+    # all circumstances.
     raise ArgumentError, "`compressed` option should only be `false` or omitted" if compressed == true
     raise ArgumentError, "`homebrew_curl` option should only be `true` or omitted" if homebrew_curl == false
-    raise ArgumentError, "Only use `post_form` or `post_json`, not both" if post_form && post_json
+    if (post_form && post_json) ||
+       (@options.post_form && post_json) ||
+       (@options.post_json && post_form)
+      raise ArgumentError, "Only use `post_form` or `post_json`, not both"
+    end
 
     @options.compressed = compressed unless compressed.nil?
     @options.cookies = cookies unless cookies.nil?

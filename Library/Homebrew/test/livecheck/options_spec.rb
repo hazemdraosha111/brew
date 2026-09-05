@@ -24,7 +24,6 @@ RSpec.describe Homebrew::Livecheck::Options do
       header:        header_string,
       homebrew_curl: true,
       post_form:     post_hash,
-      post_json:     post_hash,
       referer:       referer_url,
       user_agent:    :browser,
     }
@@ -34,7 +33,15 @@ RSpec.describe Homebrew::Livecheck::Options do
       post_form: { something: "else" },
     }
   end
+  # `post_form` and `post_json` are mutually exclusive
+  let(:post_json_args) { args.except(:post_form).merge(post_json: post_hash) }
+  let(:other_post_json_args) do
+    {
+      post_json: { something: "else" },
+    }
+  end
   let(:merged_hash) { args.merge(other_args) }
+  let(:post_json_merged_hash) { post_json_args.merge(other_post_json_args) }
   let(:base_options) { options.new(**args) }
   let(:other_options) { options.new(**other_args) }
   let(:merged_options) { options.new(**merged_hash) }
@@ -83,6 +90,12 @@ RSpec.describe Homebrew::Livecheck::Options do
       expect(options.new(**args).merge({}))
         .to eq(options.new(**args))
     end
+
+    it "doesn't modify `self`" do
+      o1 = options.new(**args)
+      expect(o1.merge(other_post_json_args)).to eq(options.new(**post_json_merged_hash))
+      expect(o1).to eq(base_options)
+    end
   end
 
   describe "#merge!" do
@@ -116,6 +129,33 @@ RSpec.describe Homebrew::Livecheck::Options do
       o1 = options.new(**args)
       expect(o1.merge!({ nonexistent: true })).to eq(base_options)
       expect(o1).to eq(base_options)
+    end
+
+    it "unsets the opposite value when `other` sets `post_form` or `post_json`" do
+      o1 = options.new(**args)
+      expect(o1.merge!(options.new(**other_post_json_args))).to eq(options.new(**post_json_merged_hash))
+
+      o2 = options.new(**args)
+      expect(o2.merge!(other_post_json_args)).to eq(options.new(**post_json_merged_hash))
+
+      o3 = options.new(**post_json_args)
+      expect(o3.merge!(other_args)).to eq(merged_options)
+    end
+
+    it "raises an error if `other` sets both `post_form` and `post_json`" do
+      o1 = options.new(**args)
+      expect { o1.merge!({ post_form: post_hash, post_json: post_hash }) }
+        .to raise_error(ArgumentError, /both `post_form` and `post_json`/)
+      expect(o1).to eq(base_options)
+
+      o2 = options.new(**args)
+      expect { o2.merge!(options.new(post_form: post_hash, post_json: post_hash)) }
+        .to raise_error(ArgumentError, /both `post_form` and `post_json`/)
+      expect(o2).to eq(base_options)
+
+      # o3 = options.new(post_form: post_hash, post_json: post_hash)
+      # expect { o3.merge!(options.new(post_form: post_hash, post_json: post_hash)) }
+      #   .to raise_error(ArgumentError, /both `post_form` and `post_json`/)
     end
   end
 
