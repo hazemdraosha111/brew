@@ -121,11 +121,8 @@ module Homebrew
       def raise_with_message!(path, cask)
         name = path.basename(".rb").to_s
 
-        if (tap_match = Regexp.new("#{HOMEBREW_TAP_DIR_REGEX.source}$").match(path.to_s))
-          raise TapUnavailableError, CoreTap.instance.name if core_formula_tap?(path)
-          raise TapUnavailableError, CoreCaskTap.instance.name if core_cask_tap?(path)
-
-          raise TapUnavailableError, "#{tap_match[:user]}/#{tap_match[:repo]}"
+        if Regexp.new("#{HOMEBREW_TAP_DIR_REGEX.source}$").match?(path.to_s)
+          raise TapUnavailableError, Tap.from_path(path)&.name || path.to_s
         elsif cask || core_cask_path?(path)
           if !CoreCaskTap.instance.installed? && Homebrew::API.cask_token?(name)
             command = "brew tap --force #{CoreCaskTap.instance.name}"
