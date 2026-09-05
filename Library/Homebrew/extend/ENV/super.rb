@@ -129,6 +129,9 @@ module Superenv
     self["BUNDLE_FORCE_RUBY_PLATFORM"] = "true"
     self["BUNDLE_VERSION"] = "system"
     self["BUNDLE_WITHOUT"] = "development:test"
+    # Set defaults for opam
+    self["OPAMNODEPEXTS"] = "1"
+    self["OPAMYES"] = "1"
 
     set_debug_symbols if debug_symbols
 
