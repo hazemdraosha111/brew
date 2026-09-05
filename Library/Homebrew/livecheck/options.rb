@@ -66,16 +66,7 @@ module Homebrew
       # `Options` object, as these are unitiailized values. This ensures that
       # existing values in `self` aren't unexpectedly overwritten with defaults.
       sig { params(other: T.any(Options, T::Hash[Symbol, T.untyped])).returns(Options) }
-      def merge(other)
-        return dup if other.empty?
-
-        this_hash = to_h
-        other_hash = other.is_a?(Options) ? other.to_h : other
-        return dup if this_hash == other_hash
-
-        new_options = this_hash.merge(other_hash)
-        Options.new(**new_options)
-      end
+      def merge(other) = dup.merge!(other)
 
       # Merges values from `other` into `self` and returns `self`.
       #
@@ -85,6 +76,14 @@ module Homebrew
       sig { params(other: T.any(Options, T::Hash[Symbol, T.untyped])).returns(Options) }
       def merge!(other)
         return self if other.empty?
+
+        # These options are mutually exclusive, so we can't know which should be
+        # used when `other` has both
+        other_post_form = T.let(other.is_a?(Options) ? other.post_form : other[:post_form], Object)
+        other_post_json = T.let(other.is_a?(Options) ? other.post_json : other[:post_json], Object)
+        if other_post_form && other_post_json
+          raise ArgumentError, "Cannot merge provided options using both `post_form` and `post_json`"
+        end
 
         if other.is_a?(Options)
           return self if self == other
@@ -99,6 +98,13 @@ module Homebrew
             cmd = :"#{k}="
             send(cmd, v) if respond_to?(cmd)
           end
+        end
+
+        # Merging one of these options should unset the opposite value in `self`
+        if !other_post_form.nil?
+          @post_json = nil
+        elsif !other_post_json.nil?
+          @post_form = nil
         end
 
         self
