@@ -162,8 +162,6 @@ module Utils
           error_write.fcntl(Fcntl::F_SETFD, Fcntl::FD_CLOEXEC)
           response_read&.fcntl(Fcntl::F_SETFD, Fcntl::FD_CLOEXEC)
 
-          Process::UID.change_privilege(Process.euid) if Process.euid != Process.uid
-
           yield(error_pipe)
         # This could be any type of exception, so rescue them all.
         rescue Exception => e # rubocop:disable Lint/RescueException

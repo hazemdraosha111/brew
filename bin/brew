@@ -12,6 +12,12 @@ fi
 
 set +o posix # as we are using bash now
 
+if [[ "${EUID}" != "${UID}" ]]
+then
+  echo "Error: Running Homebrew with different real and effective UIDs is not supported." >&2
+  exit 1
+fi
+
 # Fail fast with concise messages when PWD has issues
 if [[ -z "${PWD-}" ]]
 then

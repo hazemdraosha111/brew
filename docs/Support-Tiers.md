@@ -107,7 +107,7 @@ Unsupported configurations include:
 
 - FreeBSD
 - macOS Catalina 10.15 and earlier
-- Multi-user Homebrew environments where multiple users share the same installation
+- Multi-user Homebrew environments where multiple users share the same installation, including through a setuid wrapper that switches to the installation's owner
 - Beowulf clusters
 - Nokia 3210s
 - CPUs built inside of Minecraft
